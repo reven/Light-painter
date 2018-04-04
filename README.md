@@ -4,7 +4,7 @@ This is my take on a sketch that drives a LED strip to create persistance of vis
 
 This sketch is based on the the one written by [Phil Burgess / Paint Your Dragon](https://github.com/PaintYourDragon) for Adafruit, that can be found [here](https://github.com/adafruit/NeoPixel_Painter). A complete write-up with instructions and hardware design can be found on [Adafruit's website](https://learn.adafruit.com/neopixel-painter/overview).
 
-Instructions for my build, including LCD setup and other parts used will be linked here as soon as I write it up.
+If you want more information on the project, you can find it [here](https://en.reven.org/2018/04/04/light-painter/). STL files for the enclosure and other bits can be found on [Thingiverse](https://www.thingiverse.com/thing:2849881).
 
 **Impotant**: Please read the known issues and understand well the current draw of your LEDs and the capabilities of your power source.
 
@@ -25,8 +25,8 @@ Additionally, I wanted to maximise the brightness of my strip and to make the cr
 * Clean up code
 * Integrate debug flag and output functions (see known issues)
 * Optimizations
-* Write up build instructions
-* Add STL files for housing and battery holder.
+* ~~Write up build instructions~~
+* ~~Add STL files for housing and battery holder~~
 
 ## Main configuration options
 Options are well commented in sketch. Mainly, define your LED type, their number, and the pins you are using for your inputs/outputs. Additionally:
