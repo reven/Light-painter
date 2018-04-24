@@ -65,8 +65,8 @@
 //#define CONSISTENT     // Scale all images to the same relative brightness
 // levels. This can be useful for having frames of different brightness all
 // be processed to have consistent levels, very useful for frame painting.
-// Otherwise, if = 0, each image brightness will be the maximum that's safe
-// for *that* image (and will relatively bump up dim images).
+// Otherwise, if undefined, each image brightness will be the maximum that's
+// safe for *that* image (and will relatively bump up dim images).
 #define CURRENT_MAX 3500 // Max current from power supply (mA)
 // The software does its best to limit the LED brightness to a level that's
 // manageable by the power supply.  144 NeoPixels at full brightness can
@@ -94,7 +94,7 @@
 
 uint8_t           sdBuf[512],      // One SD block (also for NeoPixel color data)
                   pinMask,         // NeoPixel pin bitmask
-                  fileIndex[30],   // Array of file indexes. Could increase to 60. Test.
+                  fileIndex[20],   // Array of file indexes. Could increase to 60. Test.
                   selected,        // A flag for tracking selected menu option
                   menuState,       // Current page of menu to display
                   nFrames = 0,     // Total # of image files
@@ -456,9 +456,9 @@ void loop() {
 // SD SCANNING ---------------------------------------------------------------
 
 // Scans images on SD, creates the index and generates the raw files.
-// If CONSISTENT = 1: performs two passes over images. The first counts files, stores
+// If CONSISTENT is defined, performs two passes over images. The first counts files, stores
 // names and estimates the max (safe) brightness level scaled to the brightest image.
-// If CONSISTENT = 0: One pass, and each image is at it's max brightness level.
+// If CONSISTENT is undefined, one pass, and each image is at it's max brightness level.
 void completeScan(){
   uint8_t  b, minBrightness;
   char     infile[18], outfile[18];
@@ -471,17 +471,44 @@ void completeScan(){
   lcd.write(6);
 
   minBrightness = 255;
-
-  // If CONSISTENT is NOT defined, then we don't need to poll the images to get minBrightness,
-  // we can just calculate it from the user seting.
-#ifndef CONSISTENT
-  // Adjust brightness with user set value between 1 and estimated safe max
-  minBrightness = map(SetBrightness, 0, 255, 1, minBrightness);
-#endif
-
-  // 1st pass. Scan the SD and count all the bmp files. Populate fileIndex. Check brightness
   // Set back nFrames to 0 in case this is a rescan
   nFrames = 0;
+
+// If CONSISTENT is NOT defined, we scan for files and then inmediately run the second pass
+#ifndef CONSISTENT  
+
+  // Scan pass. Scan the SD and count all the bmp files. Populate fileIndex. Check brightness
+  sd.vwd()->rewind();
+  while (tmp.openNext(sd.vwd(), O_READ)) {
+    if (!tmp.isSubDir() && !tmp.isHidden() ) {
+      tmp.getName(infile, 18);
+      if (strstr(infile,"bmp") > 0) {
+        fileIndex[nFrames] = tmp.dirIndex();
+        nFrames++;
+      }
+    }
+    tmp.close();
+  }
+
+  // 1st and 2nd pass combined in same loop
+  for (i = 0; i<nFrames; i++) {
+    lcd.setCursor(2,0);
+    lcd.print(F("..Scanning.."));
+    getFileName(infile, i, 0);
+    b = 255; // Assume frame at full brightness to start. bmpProcess will return safe limit for *this* image.
+    bmpProcess(infile, NULL, &b);
+    // 2nd pass inmediately with the value of b we just got back
+    lcd.setCursor(2,0);
+    lcd.print(F("..Creating.."));
+    // Adjust brightness with user set value between 1 and estimated safe max
+    b = map(SetBrightness, 0, 255, 1, b);
+    getFileName(outfile, i, 1);
+    // call to bmpProcess
+    bmpProcess(infile, outfile, &b);
+  }
+  
+#else if CONSISTENT
+// CONSISTENT IS defined; Do a pass, consolidate minBrightness and go for second pass.
   sd.vwd()->rewind();
   while (tmp.openNext(sd.vwd(), O_READ)) {
     if (!tmp.isSubDir() && !tmp.isHidden() ) {
@@ -489,34 +516,20 @@ void completeScan(){
       if (strstr(infile,"bmp") > 0) {
         fileIndex[nFrames] = tmp.dirIndex();
 
-#ifdef CONSISTENT
         b = 255; // Assume frame at full brightness to start. bmpProcess will return safe limit for *this* image.
         bmpProcess(infile, NULL, &b);
-#else
-        // Only 1 pass: set b to minBrightness on each pass and get outfile.
-        b = minBrightness;
-        getFileName(infile, i, 0);
-        // call to bmpProcess
-        bmpProcess(infile, outfile, &b);
-#endif
         nFrames++;
-        if(b < minBrightness) minBrightness = b; // This doesn't do anything unless CONSISTENT
+        // adjust minBrightness to the lowest value observed and move on to the next input file
+        if(b < minBrightness) minBrightness = b;
       }
     }
     tmp.close();
   }
-
-#ifdef CONSISTENT
   // Adjust brightness with user set value between 1 and estimated safe max
   minBrightness = map(SetBrightness, 0, 255, 1, minBrightness);
-
-  // Second pass now applies brightness adjustment while converting
-  // the image(s) from BMP to a raw representation of NeoPixel data
-  // (this outputs the file(s) '{filename}.raw' -- any existing file
-  // by that name will simply be clobbered, IT DOES NOT ASK).
-  lcd.setCursor(2,0);
-  lcd.print(F("..Creating.."));
   for (i = 0; i<nFrames; i++) {
+    lcd.setCursor(2,0);
+    lcd.print(F("..Creating.."));
     b = minBrightness;  // Reset b to safe limit on each loop iteration
     getFileName(infile, i, 0);
     getFileName(outfile, i, 1);
