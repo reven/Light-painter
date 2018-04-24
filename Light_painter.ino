@@ -80,8 +80,6 @@
 // encounter this situation, set CURRENT_MAX to 3000.  Alternately, a more
 // powerful UBEC can be substituted (RC hobby shops may have these),
 // setting CURRENT_MAX to suit.
-#define CORRECTION_FACTOR 1.0 // Adjustment ratio to output power.
-// See README. This is a *dangerous* setting. Leave at 1 in case of doubt.
 
 #define NEO_RED        0 // Component order of the LED strip. Mine is RGB
 #define NEO_GREEN      1 // (others vary, for example Neopixels are GRB)
@@ -112,7 +110,7 @@ void bmpProcess(char *inName, char *outName, uint8_t *brightness);
 void getFileName(char* fileName, uint8_t index, uint8_t ext = 0);
 
 // Default settings. These are overwritten by EEPROM saved values if they exist
-uint8_t   SetBrightness = 125,   // Adjustable brightness
+uint8_t   SetBrightness = 255,   // Adjustable brightness
           Speed = 125,           // Adjustable speed
           Delay = 0;             // Adjustable initial delay
 
@@ -1019,11 +1017,11 @@ void bmpProcess(
       ditherRow = (uint8_t *)&dither[row & 0x0F]; // Dither values for row
       ledPtr    = ledStartPtr;
       for(column=0; column<columns; column++) {   // For each column...
-        if(b) { // Scale brightness, reorder R/G/B
+        if(b) { // Scale brightness, reorder R/G/B (2nd pass)
           pixel[NEO_BLUE]  = (ledPtr[BMP_BLUE]  * b16) >> 8;
           pixel[NEO_GREEN] = (ledPtr[BMP_GREEN] * b16) >> 8;
           pixel[NEO_RED]   = (ledPtr[BMP_RED]   * b16) >> 8;
-        } else { // Full brightness, reorder R/G/B
+        } else { // Full brightness, reorder R/G/B (1st pass)
           pixel[NEO_BLUE]  = ledPtr[BMP_BLUE];
           pixel[NEO_GREEN] = ledPtr[BMP_GREEN];
           pixel[NEO_RED]   = ledPtr[BMP_RED];
@@ -1046,13 +1044,9 @@ void bmpProcess(
       if(sum > lineMax) lineMax = sum;
 
     } // Next row
-    //Serial.println(F("OK"));
 
     if(brightness) {
-      lineMax = (lineMax * 20) / 255; // Est current @ ~20 mA/LED. Why 255?
-
-      // DANGER AHEAD!! ---------------------------------------------------------------------------!!
-      lineMax = lineMax / CORRECTION_FACTOR;        // Adjust lineMax to real power draw observed
+      lineMax = (lineMax * 20) / 255; // 255 would translate to current @ ~20 mA/LED.
 
       if(lineMax > CURRENT_MAX) {
         // Estimate suitable brightness based on CURRENT_MAX

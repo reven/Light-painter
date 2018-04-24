@@ -32,7 +32,7 @@ Additionally, I wanted to maximise the brightness of my strip and to make the cr
 Options are well commented in sketch. Mainly, define your LED type, their number, and the pins you are using for your inputs/outputs. Additionally:
 
 * set `#define CONSISTENT` if you want all your images to be balanced out. This is useful for frame painting or animations, but not too much if you're not going to be doing that.
-* set `#define CURRENT_MAX` to a reasonable value that your power supply can deliver, **but be sure to read and understand the limitations explained bellow in known issues and the *correction* factor introduced in the code**.
+* set `#define CURRENT_MAX` to a reasonable value that your power supply can deliver, **but be sure to read and understand the limitations explained bellow in known issues**.
 
 ## Known Issues:
 
@@ -42,11 +42,9 @@ This sketch is pretty packed. There is not a lot of free memory and there are a 
 #### Measured current vs calculated current drawn.
 Adafruit's original sketch has a lot of controls and safeguards to not exceed the maximum capacity of your power source. *However*, I found that the measured current was well bellow the theoretical current limit set in the sketch.
 
-Most of the diming and equalization of images takes place in the bmpProcess() function. In it, a *lineMax* variable is defined as the cumulative brightness of the brightest line in a file, and that value is used to scale down the brightness of the image. This process overshoots by a lot, at least in my measurements. With a max of 3500mA I was reading around 980mA with a really bright image.
+Most of the diming and equalization of images takes place in the bmpProcess() function. In it, a *lineMax* variable is defined as the cumulative brightness of the brightest line in a file, and that value is used to scale down the brightness of the image. This process overshoots by a lot, at least in my measurements. With a max of 3500mA I was reading around 980mA with a really bright image. I don't have the proper equipment to measure the current precisely (possibly a osciloscope would give a better picture if it depends on the duty cycle) or there may be other fators in the correction that I don't understand.
 
-I introduced a correction factor of 1.4 to lineMax, in order to boost the brightness and this provides a current draw still under half the theoretical max of my power supply. Increasing the factor caused a shift to red in the LEDs, the Arduino to hang altogether or huge voltage sags in my (probably crappy) UBEC. I don't have the proper equipment to measure the current precisely (possibly a osciloscope would give a better picture if it depends on the duty cycle) or there may be other fators in the correction that I don't understand.
-
-To sumarize: **this is a dangerous change and probably not a good idea**. Set it back to 1 unless you're sure; and again, make sure you understand the capabilities of your power source and the chatacteristics of your LEDs.
+The correction works best when the user defined brightness is maximum. Lowering that will cascade a lot of losses (safety margin + gamma correction, etc). Make sure you understand the capabilities of your power source and the chatacteristics of your LEDs and you should be good.
 
 #### Memory and file indexes
 In order to save precious memory, the files are accessed by their *Index* on the SD card directory, and the number is stored as a uint8_t. That's one byte per file on the SD (about 30 bytes with current max). With a perfectly clean filesystem and no long names, that would give us room for about 70 files or so (not sure how indexes are assigned...) long before before the index reaches values above 255 and overflows, even taking the generated raw files into account. *However*, the index number grows rather quickly when the user OS adds hidden files and directories, causing the index number to grow past 255.
