@@ -1,45 +1,55 @@
 
 /*
  * Light painter
- * 
- * A sketch that drives a LED strip to create persistance of vision (POV) images
- * from 24-bit bitmap files, that can be used to paint images in long exposure photography.
- * Files are selectable through and LCD menu through witch brightness, speed and delay can
- * also be adjusted. Settings can be saved to EEPROM.
- * 
- * Requires: Arduino, LED strip, SD module, LCD (this uses I2C), momentary push buttons, UBEC
- *           or similar power supply.
- * 
+ *
+ * A sketch that reads 24-bit bitmap files and converts them for display
+ * on a LED strip in order to generate patterns and images that can be
+ * captured in long exposure photography.
+ *
+ * An LCD menu allow selecting the files to display and asjusting other
+ * settings such as brightness, speed and delay. The settings can be saved
+ * to EEPROM.
+ *
+ * Requires: Arduino, addressable LED strip, SD module (and card), an LCD
+ * (this uses I2C), momentary push buttons and an UBEC or similar power supply.
+ *
  * Menu navigation: Up, down, select/trigger
  *     - file select
  *     - brightness
  *     - speed
  *     - delay
  *     - save to EEPROM
- * 
- * v1.0 - 14-FEB-18
- * 
- * Files re
- * 
+ *
+ * v1.1 - 24-APR-18
+ *
  * © 2018 Robert Sanchez
- * Files released under the terms of a BSD license. Please see included LICENSE file. 
- * 
- * Based on Adafruit Neopixel Light Painter Sketch. Please see README for credits and instructions.
- * 
+ * Files released under the terms of a BSD license.
+ * Please see included LICENSE file.
+ *
+ * Based on Adafruit Neopixel Light Painter Sketch.
+ * Please see README for credits and instructions.
+ *
  */
 
 // DEBUG MODE ---------------------------------------------------------------
-//#define DEBUG           // Still not operational, but this compiler flag will turn on debug mode,
-                          // which activates Serial and ignores LCD. This needs some work.
+//#define DEBUG // Still not operational, but this compiler flag will turn on debug
+                // mode, which activates Serial, ignores LCD and defines the
+                // D() macro.
+#ifdef DEBUG
+  #define D(x) do { x } while(0)
+#else
+  #define D(x) do { } while(0)
+#endif
 
 // INCLUDES -----------------------------------------------------------------
 #include <SdFat.h>
 #include <EEPROM.h>
 #include "./gamma.h"
-#include <LiquidCrystal_I2C.h>
-#include "./chars.h"
 #include "./menu.h"
-
+#ifndef DEBUG
+  #include <LiquidCrystal_I2C.h>
+  #include "./chars.h"
+#endif
 
 // CONFIGURABLE STUFF --------------------------------------------------------
 
@@ -56,7 +66,7 @@
 // levels. This can be useful for having frames of different brightness all
 // be processed to have consistent levels, very useful for frame painting.
 // Otherwise, if = 0, each image brightness will be the maximum that's safe
-// for *that* image (and will relatively bump up dim images). 
+// for *that* image (and will relatively bump up dim images).
 #define CURRENT_MAX 3500 // Max current from power supply (mA)
 // The software does its best to limit the LED brightness to a level that's
 // manageable by the power supply.  144 NeoPixels at full brightness can
@@ -70,7 +80,7 @@
 // encounter this situation, set CURRENT_MAX to 3000.  Alternately, a more
 // powerful UBEC can be substituted (RC hobby shops may have these),
 // setting CURRENT_MAX to suit.
-#define CORRECTION_FACTOR 1.4 // Adjustment ratio to output power.
+#define CORRECTION_FACTOR 1.0 // Adjustment ratio to output power.
 // See README. This is a *dangerous* setting. Leave at 1 in case of doubt.
 
 #define NEO_RED        0 // Component order of the LED strip. Mine is RGB
@@ -99,7 +109,7 @@ volatile uint8_t *port;            // NeoPixel PORT register
 
 // Functions defined here to be nice to compiler
 void bmpProcess(char *inName, char *outName, uint8_t *brightness);
-void getFileName(char* fileName, uint8_t index, uint8_t ext = 0); 
+void getFileName(char* fileName, uint8_t index, uint8_t ext = 0);
 
 // Default settings. These are overwritten by EEPROM saved values if they exist
 uint8_t   SetBrightness = 125,   // Adjustable brightness
@@ -107,14 +117,16 @@ uint8_t   SetBrightness = 125,   // Adjustable brightness
           Delay = 0;             // Adjustable initial delay
 
 // Initialize LCD screen instance
-LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLS, LCD_ROWS);
-
+#ifndef DEBUG
+  LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLS, LCD_ROWS);
+#endif
 
 // INITIALIZATION ------------------------------------------------------------
 
 void setup() {
-  // Conditional to DEBUG flag should go here
-  // Serial.begin(57600);
+  #ifdef DEBUG
+    Serial.begin(57600);
+  #endif
 
   digitalWrite(TRIGGER, HIGH);           // Enable pullup on trigger button
   digitalWrite(SEL_UP, HIGH);            // Enable pullup on up button
@@ -125,7 +137,7 @@ void setup() {
   pinMask = digitalPinToBitMask(LED_PIN);
   memset(sdBuf, 0, N_LEDS * 3);          // Clear LED buffer
   show();                                // Init LEDs to 'off' state
-  
+
   // Load config from EEPROM
   loadConfig();
 
@@ -153,7 +165,7 @@ void setup() {
   lcd.write(126);
   lcd.print(F("OK "));
   while (digitalRead(TRIGGER) == HIGH) { } // wait for button press
-  
+
   // Scan or rescan card. Ask User
   lcd.clear();
   lcd.print(F("Rescan SD card?"));
@@ -170,12 +182,12 @@ void setup() {
   // Complete scan
   if (digitalRead(SEL_UP) == LOW) {
     while(digitalRead(SEL_UP) == LOW); // Wait for button release
-    completeScan();    
+    completeScan();
 
-  // Keep current data  
+  // Keep current data
   } else if (digitalRead(SEL_DN) == LOW) { // We don't want a full scan, use existing data.
     while(digitalRead(SEL_DN) == LOW); // Wait for button release
-    shortScan(); 
+    shortScan();
 
   } // end Scan test
 
@@ -352,7 +364,7 @@ void loop() {
       printMenuStr(8);
       while(digitalRead(TRIGGER) == HIGH); // Wait for button release
       while(digitalRead(TRIGGER) == LOW);
-      completeScan(); 
+      completeScan();
       checkSpeed();
       if(maxLPS > 400) maxLPS = 400;
       preload(); // We've changed file so preload() again.
@@ -401,7 +413,7 @@ void loop() {
         frame--;
       }
       selected = 0;
-      break;     
+      break;
     }
     if (inputOption == 2 && selected == 0){
       if (frame == nFrames - 1){
@@ -459,7 +471,7 @@ void completeScan(){
   lcd.print(F("  ..Scanning.."));
   lcd.setCursor(0,0);
   lcd.write(6);
-  
+
   minBrightness = 255;
 
   // If CONSISTENT is NOT defined, then we don't need to poll the images to get minBrightness,
@@ -478,7 +490,7 @@ void completeScan(){
       tmp.getName(infile, 18);
       if (strstr(infile,"bmp") > 0) {
         fileIndex[nFrames] = tmp.dirIndex();
-        
+
 #ifdef CONSISTENT
         b = 255; // Assume frame at full brightness to start. bmpProcess will return safe limit for *this* image.
         bmpProcess(infile, NULL, &b);
@@ -490,7 +502,7 @@ void completeScan(){
         bmpProcess(infile, outfile, &b);
 #endif
         nFrames++;
-        if(b < minBrightness) minBrightness = b; // This doesn't do anything unless CONSISTENT 
+        if(b < minBrightness) minBrightness = b; // This doesn't do anything unless CONSISTENT
       }
     }
     tmp.close();
@@ -513,7 +525,7 @@ void completeScan(){
     // call to bmpProcess
     bmpProcess(infile, outfile, &b);
   }
-#endif  
+#endif
 
 }
 
@@ -521,7 +533,7 @@ void completeScan(){
 // Makes sure raw files are contiguous before continuing.
 void shortScan() {
   char     infile[18], outfile[18];
-  uint8_t  i; 
+  uint8_t  i;
   uint32_t lastBlock;
   SdFile   tmp;
 
@@ -551,10 +563,10 @@ void shortScan() {
 void checkSpeed(){
   char     outfile[18];
   uint8_t  i;
-  uint16_t n; 
+  uint16_t n;
   uint32_t lastBlock;
   SdFile   tmp;
-  
+
   for (i = 0; i<nFrames; i++) {                           // Iterate over indexed files
     getFileName(outfile, i, 1);                           // get raw file name
     if(tmp.open(outfile, O_RDONLY)) {                     // open raw file
@@ -692,7 +704,7 @@ void menuDisplay(uint8_t state) {
     lcd.setCursor(0,1);
     solidBlocks = (Speed+1)/16;
     for (int i = 0; i<solidBlocks; i++) { lcd.write(255); }
-    for (int i=solidBlocks; i<16; i++) { lcd.write(165); }  
+    for (int i=solidBlocks; i<16; i++) { lcd.write(165); }
     break;
 
     case 7: // Delay setting
@@ -702,7 +714,7 @@ void menuDisplay(uint8_t state) {
     lcd.setCursor(0,1);
     solidBlocks = (Delay+1)/16;
     for (int i = 0; i<solidBlocks; i++) { lcd.write(255); }
-    for (int i=solidBlocks; i<16; i++) { lcd.write(165); }   
+    for (int i=solidBlocks; i<16; i++) { lcd.write(165); }
     break;
 
     case 8: // Choose file
@@ -797,8 +809,8 @@ int getInput (){
     // debounce and wait for release for the rest of menus
     delay(50);
     while(digitalRead(SEL_UP) == LOW || digitalRead(SEL_DN) == LOW || digitalRead(TRIGGER) == LOW);
-  } 
-  
+  }
+
   // return value
   return a;
 }
@@ -811,7 +823,7 @@ void preload(){
   uint32_t        lastBlock;
   char            outfile[18];
   SdFile          tmp;
-  
+
   // Get existing contiguous tempfile info
   getFileName(outfile, frame, 1);                       // get name
   if(!tmp.open(outfile, O_RDONLY)) {
@@ -835,28 +847,28 @@ void preload(){
 }
 
 // Puts the display of the frame into action. Dims the screen, waits for delay,
-// trigers the show functions and waits for a button press to return to menu. 
+// trigers the show functions and waits for a button press to return to menu.
 void trigger(){
   boolean         stopFlag = false; // If set, stop playback loop
   uint32_t        block    = 0;     // Current block # within file
-  
+
   // dim lcd screen
   lcd.noBacklight();
   lcd.clear();
   for (uint8_t i = 6; i<10; i++) {
     lcd.setCursor(i,0);
     lcd.write(165);
-  } 
+  }
 
   // Delay
   if (Delay > 0) {
     delay (Delay * 1000); // Delay is in seconds.
   }
-  
+
   // Timer0 interrupt is disabled for smoother playback.
   // This means delay(), millis(), etc. won't work after this.
   TIMSK0 = 0;
-      
+
   // Set up timer based on dial input
   uint32_t linesPerSec = map(Speed, 0, 255, 10, maxLPS);
   // Serial.println(linesPerSec);
@@ -890,7 +902,7 @@ void trigger(){
   lcd.backlight();
 
 }
-      
+
 // BMP->NEOPIXEL FILE CONVERSION ---------------------------------------------
 
 // Convert file from 24-bit Windows BMP format to raw NeoPixel datastream.
@@ -1041,13 +1053,13 @@ void bmpProcess(
 
       // DANGER AHEAD!! ---------------------------------------------------------------------------!!
       lineMax = lineMax / CORRECTION_FACTOR;        // Adjust lineMax to real power draw observed
-      
+
       if(lineMax > CURRENT_MAX) {
         // Estimate suitable brightness based on CURRENT_MAX
         *brightness = (*brightness * (uint32_t)CURRENT_MAX) / lineMax;
       } // Else no recommended change
     }
-    
+
   } else { // end BMP header check
     error(F(":( BMP format"),F(" not recognized."));
   }
@@ -1126,7 +1138,7 @@ void saveConfig() {
 }
 
 // Loads configuration variables if position 0 contains the right flag for
-// this version ( 66 ). 
+// this version ( 66 ).
 void loadConfig() {
   if (EEPROM.read(0) == 66){
     SetBrightness = EEPROM.read(1);
@@ -1137,7 +1149,7 @@ void loadConfig() {
 
 // Brightness change is always written to EEPROM, otherwise on next power up
 // saved files would be generated with a diffrent brightness value than what
-// we load from the config 
+// we load from the config
 void saveBrightness() {
   EEPROM.update(0,66);               // Current version (v1.0) flag is 66;
   EEPROM.update(1,SetBrightness);
